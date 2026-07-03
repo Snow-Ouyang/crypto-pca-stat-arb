@@ -40,6 +40,32 @@ The advanced PCA mainline improves cumulative net equity, reduces drawdown, and 
 
 Final net equity is reported as cumulative strategy PnL/equity under the research backtest engine, not an annualized return.
 
+## Visual Highlights
+
+### Converged Mainline Performance
+
+The final comparison uses the same audited engine for ordinary PCA and advanced PCA. Advanced PCA improves net equity while reducing drawdown.
+
+![Converged mainline net equity](reports/final_report/converged_mainline/figures/converged_mainline_net_equity_5bps.png)
+
+### Ordinary PCA Factor Structure
+
+The ordinary PCA diagnostics show that PC1 dominates the crypto cross-section, while PC2 and PC3 are much smaller but still retained for residual construction.
+
+![Ordinary PCA explained variance](reports/final_report/figures/pca/explained_variance_ratio_over_time.png)
+
+### Advanced PCA Diagnostics
+
+Advanced PCA keeps the W360 / PC3 structure but changes the factor basis by penalizing residual comovement, targeting cleaner mean-reversion residuals.
+
+![Advanced PCA explained variance](reports/final_report/advanced_pca_v1/figures/advanced_pca_explained_variance_ratio_over_time.png)
+
+### Signal Layer Check
+
+The naive 1-dollar layer verifies that the residual s-score signal has directional content before portfolio construction and exposure control.
+
+![Naive signal equity curves](reports/final_report/figures/naive/naive_long_short_equity_curves.png)
+
 ## Key Validation
 
 - No-lookahead PCA window construction.
