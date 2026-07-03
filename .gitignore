@@ -1,0 +1,20 @@
+# Python caches
+__pycache__/
+*.pyc
+
+# Generated research data and backtest outputs
+data/processed/
+
+# Generated reports, tables, and figures
+reports/final_report/figures/
+reports/final_report/tables/
+reports/final_report/bad_trade_mechanism_report.md
+reports/final_report/*/
+reports/final_report/*_trade_stop_test/
+
+# Large generated artifacts
+*.csv.gz
+*.gz
+*.parquet
+*.feather
+*.pkl
