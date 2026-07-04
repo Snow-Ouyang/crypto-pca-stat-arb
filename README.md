@@ -58,7 +58,7 @@ The ordinary PCA diagnostics show that PC1 dominates the crypto cross-section, w
 
 Advanced PCA keeps the W360 / PC3 structure but changes the factor basis by penalizing residual comovement, targeting cleaner mean-reversion residuals.
 
-![Advanced PCA explained variance](reports/final_report/advanced_pca_v1/figures/advanced_pca_explained_variance_ratio_over_time.png)
+![Advanced PCA explained variance](reports/final_report/advanced_pca_v1/figures/advanced_pca_explained_variance_ratio_over_time_continuous_candidate.png)
 
 ### Signal Layer Check
 
