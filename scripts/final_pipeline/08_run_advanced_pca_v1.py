@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from joblib import Parallel, delayed
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -94,64 +96,26 @@ def build_advanced_pca_diagnostics(args: argparse.Namespace) -> pd.DataFrame:
 
     start = research.WINDOW
     stop = len(common_index) if args.max_hours is None else min(len(common_index), research.WINDOW + args.max_hours)
-    rows: list[dict[str, object]] = []
-    skipped = 0
-    for count, pos in enumerate(range(start, stop), start=1):
-        if count == 1 or count % 250 == 0:
-            log(f"advanced PCA diagnostics {count}/{stop - start}")
-        ts = common_index[pos]
-        candidates = research.active_universe_from_row(universe.loc[ts, rank_cols], price_cols)
-        if len(candidates) < args.min_assets:
-            skipped += 1
-            continue
-        ret_window = returns.iloc[pos - research.WINDOW : pos][candidates]
-        current_ret = returns.iloc[pos][candidates]
-        current_price = prices.iloc[pos][candidates]
-        good_now = current_ret.notna() & current_price.gt(0)
-        eligible_now = [c for c in candidates if bool(good_now.get(c, False))]
-        if len(eligible_now) < args.min_assets:
-            skipped += 1
-            continue
-        ret_window_now = ret_window[eligible_now]
-        y_fit, eligible_now_check = research.standardize_window(ret_window_now)
-        if eligible_now_check != eligible_now:
-            skipped += 1
-            continue
-        basis = research.pca_basis(y_fit)
-        m = min(args.m_components, len(eligible_now) - 1, len(basis.eigvals))
-        if m < research.K_FACTORS:
-            skipped += 1
-            continue
-        a, opt = research.optimize_advanced_pca(
-            y=y_fit,
-            basis=basis,
-            m=m,
-            k=research.K_FACTORS,
-            lambda_penalty=PCA_LAMBDA,
-            rng=rng,
-            random_starts=args.random_starts,
-            maxiter=args.maxiter,
+    positions = list(range(start, stop))
+    log(f"advanced PCA diagnostics timestamps={len(positions)} n_jobs={args.n_jobs}")
+    results = Parallel(n_jobs=args.n_jobs, backend=args.parallel_backend, batch_size=args.batch_size, verbose=10)(
+        delayed(compute_advanced_pca_diagnostic_timestamp)(
+            pos,
+            prices,
+            returns,
+            universe,
+            rank_cols,
+            price_cols,
+            args,
         )
-        q = basis.eigvecs[:, :m] @ a
-        cov = np.cov(y_fit, rowvar=False)
-        total_var = float(np.trace(cov))
-        evr = [float(q[:, i].T @ cov @ q[:, i] / total_var) for i in range(research.K_FACTORS)]
-        rows.append(
-            {
-                "timestamp": ts,
-                "method": "advanced_pca_v1",
-                "lambda_pca": PCA_LAMBDA,
-                "eligible_tickers": len(eligible_now),
-                "PC1_explained_var_ratio": evr[0],
-                "PC2_explained_var_ratio": evr[1],
-                "PC3_explained_var_ratio": evr[2],
-                "cumulative_explained_var_ratio_3": float(sum(evr)),
-                "optimizer_success": bool(opt.get("optimizer_success", False)),
-                "optimizer_objective_value": opt.get("optimizer_objective_value", np.nan),
-            }
-        )
+        for pos in positions
+    )
+    rows = [row for row, _reason in results if row is not None]
+    skipped = sum(1 for row, _reason in results if row is None)
+    skip_rows = [{"timestamp": common_index[pos], "skip_reason": reason} for pos, (_row, reason) in zip(positions, results) if _row is None]
     diag = pd.DataFrame(rows)
     diag.to_csv(OUT_DIR / "advanced_pca_v1_explained_variance.csv", index=False)
+    pd.DataFrame(skip_rows).to_csv(OUT_DIR / "advanced_pca_v1_diagnostic_skips.csv", index=False)
     pd.DataFrame([{"skipped_pca_diagnostic_timestamps": skipped, "rows": len(diag)}]).to_csv(
         OUT_DIR / "advanced_pca_v1_diagnostics_summary.csv",
         index=False,
@@ -159,10 +123,78 @@ def build_advanced_pca_diagnostics(args: argparse.Namespace) -> pd.DataFrame:
     return diag
 
 
+def compute_advanced_pca_diagnostic_timestamp(
+    pos: int,
+    prices: pd.DataFrame,
+    returns: pd.DataFrame,
+    universe: pd.DataFrame,
+    rank_cols: list[str],
+    price_cols: set[str],
+    args: argparse.Namespace,
+) -> tuple[dict[str, object] | None, str]:
+    ts = prices.index[pos]
+    candidates = research.active_universe_from_row(universe.loc[ts, rank_cols], price_cols)
+    if len(candidates) < args.min_assets:
+        return None, "insufficient_candidates"
+    ret_window = returns.iloc[pos - research.WINDOW : pos][candidates]
+    _y, eligible = research.standardize_window(ret_window)
+    if len(eligible) < args.min_assets:
+        return None, "insufficient_complete_window"
+    current_ret = returns.iloc[pos][eligible]
+    current_price = prices.iloc[pos][eligible]
+    good_now = current_ret.notna() & current_price.gt(0)
+    if int(good_now.sum()) < args.min_assets:
+        return None, "insufficient_current_valid"
+    eligible_now = [c for c in eligible if bool(good_now.get(c, False))]
+    ret_window_now = ret_window[eligible_now]
+    y_fit, eligible_now_check = research.standardize_window(ret_window_now)
+    if eligible_now_check != eligible_now:
+        return None, "eligible_recheck_mismatch"
+    basis = research.pca_basis(y_fit)
+    m = min(args.m_components, len(eligible_now) - 1, len(basis.eigvals))
+    if m < research.K_FACTORS:
+        return None, "insufficient_m_components"
+    rng = np.random.default_rng(args.seed + int(pos))
+    a, opt = research.optimize_advanced_pca(
+        y=y_fit,
+        basis=basis,
+        m=m,
+        k=research.K_FACTORS,
+        lambda_penalty=PCA_LAMBDA,
+        rng=rng,
+        random_starts=args.random_starts,
+        maxiter=args.maxiter,
+    )
+    q = basis.eigvecs[:, :m] @ a
+    cov = np.cov(y_fit, rowvar=False)
+    total_var = float(np.trace(cov))
+    if total_var <= 0 or not np.isfinite(total_var):
+        return None, "invalid_total_variance"
+    evr = [float(q[:, i].T @ cov @ q[:, i] / total_var) for i in range(research.K_FACTORS)]
+    return (
+        {
+            "timestamp": ts,
+            "method": "advanced_pca_v1",
+            "lambda_pca": PCA_LAMBDA,
+            "eligible_tickers": len(eligible_now),
+            "PC1_explained_var_ratio": evr[0],
+            "PC2_explained_var_ratio": evr[1],
+            "PC3_explained_var_ratio": evr[2],
+            "cumulative_explained_var_ratio_3": float(sum(evr)),
+            "optimizer_success": bool(opt.get("optimizer_success", False)),
+            "optimizer_objective_value": opt.get("optimizer_objective_value", np.nan),
+        },
+        "",
+    )
+
+
 def plot_advanced_explained_variance(diag: pd.DataFrame) -> None:
     if diag.empty:
         return
     df = diag.sort_values("timestamp").copy()
+    df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+    hourly = pd.DataFrame({"timestamp": pd.date_range(df["timestamp"].min(), df["timestamp"].max(), freq="h", tz="UTC")})
+    df = hourly.merge(df, on="timestamp", how="left")
     fig, ax = plt.subplots(figsize=(12, 5))
     ax2 = ax.twinx()
     pc1_line = ax.plot(df["timestamp"], df["PC1_explained_var_ratio"], label="Advanced PC1", linewidth=1.0, color="tab:blue")
@@ -409,6 +441,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--maxiter", type=int, default=20)
     parser.add_argument("--random-starts", type=int, default=0)
     parser.add_argument("--seed", type=int, default=20260630)
+    parser.add_argument("--n-jobs", type=int, default=max(1, min(8, (os.cpu_count() or 4) - 2)))
+    parser.add_argument("--batch-size", type=int, default=1)
+    parser.add_argument("--parallel-backend", choices=["threading", "loky"], default="threading")
     parser.add_argument("--reuse", action="store_true", help="Reuse final_pipeline/advanced_pca_v1 residual or signal panel if present.")
     parser.add_argument("--diagnostics-only", action="store_true", help="Only build advanced PCA diagnostics and figure.")
     args = parser.parse_args()
