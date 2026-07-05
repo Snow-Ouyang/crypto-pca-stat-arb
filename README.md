@@ -24,12 +24,16 @@ Ordinary PCA selects factors by maximizing explained variance, but statistical a
 
 The advanced PCA objective searches for three orthonormal factors inside the ordinary PCA candidate subspace:
 
-```text
-min_Q reconstruction_loss(Y, Q)
-    + lambda_pca_comovement * residual_PC1_EVR_corr(Y - Y Q Q')
-
-subject to Q'Q = I
-```
+$$
+\begin{aligned}
+\min_Q \quad
+& \operatorname{reconstruction\_loss}(Y, Q)
+  + \lambda_{\text{pca\_comovement}}
+    \cdot \operatorname{residual\_PC1\_EVR\_corr}(Y - YQQ^\top) \\
+\text{s.t.} \quad
+& Q^\top Q = I
+\end{aligned}
+$$
 
 where `Y` is the rolling W360 standardized return matrix, `Q` is the selected PC1-PC3 factor basis, and `residual_PC1_EVR_corr` is the first explained-variance ratio of the residual correlation matrix.
 
@@ -41,13 +45,18 @@ The exact residual-cleanliness diagnostics are reported under `reports/final_rep
 
 The portfolio optimizer starts from an equal-weight dollar-neutral sleeve as a robust prior, then applies a soft z-factor exposure penalty to reduce residual factor imbalance:
 
-```text
-min_w ||w - w_equal||_2^2 + lambda_portfolio_zbeta * z_beta_exposure(w)^2
-
-subject to sum(w_long) = sum(w_short)
-           sum(|w|) <= gross_cap capacity
-           w_long >= 0, w_short >= 0
-```
+$$
+\begin{aligned}
+\min_w \quad
+& \lVert w - w_{\text{equal}} \rVert_2^2
+  + \lambda_{\text{portfolio\_zbeta}}
+    \cdot z_{\beta,\text{exposure}}(w)^2 \\
+\text{s.t.} \quad
+& \sum_i w_{\text{long}, i} = \sum_j w_{\text{short}, j} \\
+& \sum_k |w_k| \le \text{gross cap capacity} \\
+& w_{\text{long}, i} \ge 0,\quad w_{\text{short}, j} \ge 0
+\end{aligned}
+$$
 
 The equal-weight prior keeps sizing stable, while the soft penalty avoids the infeasibility and overconstraint risk of a hard factor-neutral rule. Long and short notional remain dollar-neutral at sleeve entry; the optimizer mainly improves factor exposure balance when signal breadth allows it. The displayed mainline uses `lambda_portfolio_zbeta = 3.0` and `gross_cap = 1.5`.
 
