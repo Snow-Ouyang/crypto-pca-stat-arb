@@ -68,16 +68,16 @@ This baseline is deliberately plain:
 
 - ordinary PCA residuals;
 - equal long and short notional at sleeve entry;
-- gross cap `2.5`;
+- gross cap `1.5`;
 - fixed thresholds: long entry/exit `1 / 0.5`, short entry/exit `1 / 0.25`;
 - `half_life <= 90h`;
 - force exit when a ticker leaves the no-lookahead universe.
 
-At 5bps, the ordinary equal-weight baseline produces positive but weak performance:
+At 5bps and `gross_cap = 1.5`, the ordinary equal-weight baseline produces positive but weak performance:
 
 | method | fee_bps | final_net_equity | max_drawdown_net | sharpe_like_net | positions | sleeves |
 |:--|--:|--:|--:|--:|--:|--:|
-| ordinary equal-weight | 5 | 1.4295 | -1.1939 | 0.7970 | 8165 | 2545 |
+| ordinary equal-weight | 5 | 0.8628 | -0.7209 | 0.8008 | 8165 | 2545 |
 
 ## 5. Advanced PCA
 
@@ -94,9 +94,13 @@ The selected mainline setting is:
 - same dynamic eligible universe as ordinary PCA;
 - same OU and signal filters as the ordinary baseline.
 
-Advanced PCA keeps the economic interpretation clean: the strategy improves because the residuals are cleaner, not because more signal filters are added.
+Advanced PCA keeps the economic interpretation clean: the strategy improves because the residuals are cleaner, not because more signal filters are added. The evaluation therefore focuses on residual pairwise correlation and residual PC1 EVR, not only on factor explained variance. In the retained W360 residual-cleanliness diagnostic, advanced PCA reduces average absolute residual pairwise correlation from `0.0762` to `0.0734` and residual PC1 EVR corr from `0.0923` to `0.0865`.
 
-![Advanced PCA explained variance](advanced_pca_v1/figures/advanced_pca_explained_variance_ratio_over_time.png)
+![Advanced PCA explained variance](advanced_pca_v1/figures/advanced_pca_explained_variance_ratio_over_time_continuous_candidate.png)
+
+![Residual cleanliness](residual_cleanliness/figures/residual_cleanliness_bar.png)
+
+Detailed residual-cleanliness diagnostics are saved in `reports/final_report/residual_cleanliness/residual_cleanliness_summary.csv`.
 
 ## 6. Portfolio Optimizer
 
@@ -113,16 +117,30 @@ The selected mainline setting is:
 - long and short notional remain equal at sleeve entry;
 - existing positions are not continuously rebalanced.
 
+The optimizer is equal-weight-prior rather than a hard factor-neutral projection:
+
+```text
+min_w ||w - w_equal||_2^2 + lambda_portfolio_zbeta * z_beta_exposure(w)^2
+```
+
+This soft penalty avoids hard-neutrality infeasibility while still reducing factor exposure imbalance when the available long/short signal set is broad enough.
+
 ![Converged mainline equity](converged_mainline/figures/converged_mainline_net_equity_5bps.png)
 
 ## 7. Mainline Performance
 
-The converged comparison at 5bps:
+The converged comparison at 5bps uses `gross_cap = 1.5`, chosen as a moderately aggressive but not highly levered display setting:
 
-| method | PCA | portfolio | fee_bps | final_net_equity | max_drawdown_net | sharpe_like_net | avg_active_gross_exposure | positions | sleeves |
-|:--|:--|:--|--:|--:|--:|--:|--:|--:|--:|
-| ordinary | ordinary PC1-PC3 | equal-weight dollar neutral | 5 | 1.4295 | -1.1939 | 0.7970 | 2.2858 | 8165 | 2545 |
-| advanced | residual-comovement-penalized PCA, `lambda_pca_comovement = 0.5` | soft factor optimizer, `lambda_portfolio_zbeta = 3.0` | 5 | 4.7158 | -0.6293 | 2.9666 | 2.2201 | 4609 | 1718 |
+| method | PCA | portfolio | gross_cap | fee_bps | final_net_equity | max_drawdown_net | sharpe_like_net | avg_active_gross_exposure | positions | sleeves |
+|:--|:--|:--|--:|--:|--:|--:|--:|--:|--:|--:|
+| ordinary | ordinary PC1-PC3 | equal-weight dollar neutral | 1.5 | 5 | 0.8628 | -0.7209 | 0.8008 | 1.3716 | 8165 | 2545 |
+| advanced | residual-comovement-penalized PCA, `lambda_pca_comovement = 0.5` | soft factor optimizer, `lambda_portfolio_zbeta = 3.0` | 1.5 | 5 | 2.8168 | -0.3775 | 2.9122 | 1.3328 | 4598 | 1711 |
+
+Leverage sensitivity was checked separately at `1.0x`, `1.5x`, `2.0x`, and `2.5x`. Final equity divided by gross cap is stable across these settings, so the headline result is not dependent on the former `2.5x` display leverage.
+
+![Leverage sensitivity](leverage_sensitivity/figures/baseline_advanced_net_equity_by_leverage_5bps.png)
+
+![Final equity per leverage](leverage_sensitivity/figures/final_equity_per_leverage_bar_5bps.png)
 
 All accounting checks pass:
 

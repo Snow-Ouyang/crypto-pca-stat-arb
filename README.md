@@ -16,6 +16,26 @@ This project builds an hourly crypto statistical arbitrage research pipeline bas
 
 Ordinary PCA focuses on explained variance. Advanced PCA adds a residual-comovement penalty. The goal is cleaner residuals for statistical arbitrage, not only better factor explanation.
 
+## Research Highlights
+
+### Residual-comovement-penalized PCA
+
+Ordinary PCA selects factors by maximizing explained variance, but statistical arbitrage cares about the quality of the remaining residuals. This project introduces an advanced PCA variant that penalizes residual comovement, targeting residuals with lower pairwise correlation and lower residual PC1 explained variance.
+
+The goal is not only to explain the crypto return cross-section, but to construct residuals that are cleaner for OU-style mean-reversion trading. Compared with ordinary PCA, the advanced PCA reduces average absolute residual pairwise correlation by `3.7%` and residual PC1 EVR by `6.4%` in the retained W360 diagnostic.
+
+The exact residual-cleanliness diagnostics are reported under `reports/final_report/residual_cleanliness/`.
+
+### Equal-weight-prior factor-neutral optimizer
+
+The portfolio optimizer starts from an equal-weight dollar-neutral sleeve as a robust prior, then applies a soft z-factor exposure penalty to reduce residual factor imbalance:
+
+```text
+min_w ||w - w_equal||_2^2 + lambda_portfolio_zbeta * z_beta_exposure(w)^2
+```
+
+The equal-weight prior keeps sizing stable, while the soft penalty avoids the infeasibility and overconstraint risk of a hard factor-neutral rule. Long and short notional remain dollar-neutral at sleeve entry; the optimizer mainly improves factor exposure balance when signal breadth allows it.
+
 ## Converged Mainline
 
 - Data: hourly crypto close data.
@@ -26,15 +46,16 @@ Ordinary PCA focuses on explained variance. Advanced PCA adds a residual-comovem
 - Ordinary baseline: ordinary PCA + equal-weight dollar-neutral sleeves.
 - Advanced PCA: residual-comovement-penalized PCA with `lambda_pca_comovement = 0.5`.
 - Portfolio optimizer: soft factor exposure penalty with `lambda_portfolio_zbeta = 3.0`.
+- Gross exposure cap: `1.5x`, used as the displayed mainline to represent a moderately aggressive research strategy.
 - Universe rule in converged mainline: force exit when a ticker leaves the no-lookahead universe.
 - Main reporting fee: 5bps; 0bps and 10bps also reported.
 
-## Main Result
+## Main Result: Cleaner Residuals + Controlled Factor Exposure
 
 | Model | Fee | Final net equity | Max drawdown | Sharpe-like |
 |---|---:|---:|---:|---:|
-| Ordinary PCA equal-weight | 5bps | 1.4295 | -1.1939 | 0.7970 |
-| Advanced PCA + optimizer | 5bps | 4.7158 | -0.6293 | 2.9666 |
+| Ordinary PCA equal-weight | 5bps | 0.8628 | -0.7209 | 0.8008 |
+| Advanced PCA + optimizer | 5bps | 2.8168 | -0.3775 | 2.9122 |
 
 The advanced PCA mainline improves cumulative net equity, reduces drawdown, and materially improves the Sharpe-like metric under the same audited research engine.
 
@@ -59,6 +80,20 @@ The ordinary PCA diagnostics show that PC1 dominates the crypto cross-section, w
 Advanced PCA keeps the W360 / PC3 structure but changes the factor basis by penalizing residual comovement, targeting cleaner mean-reversion residuals.
 
 ![Advanced PCA explained variance](reports/final_report/advanced_pca_v1/figures/advanced_pca_explained_variance_ratio_over_time_continuous_candidate.png)
+
+### Residual Cleanliness Improvement
+
+Advanced PCA is evaluated by the cleanliness of the residual space, not by a large change in explained variance. The key diagnostics are lower average absolute residual pairwise correlation and lower residual PC1 EVR after factor removal.
+
+![Residual cleanliness](reports/final_report/residual_cleanliness/figures/residual_cleanliness_bar.png)
+
+### Leverage Sensitivity
+
+The displayed mainline uses `gross_cap = 1.5x`. A separate leverage diagnostic reruns the same signals and final engine at `1.0x`, `1.5x`, `2.0x`, and `2.5x`; final equity divided by gross cap is stable across the range, so the result is not driven by a fragile high-leverage setting.
+
+![Leverage sensitivity](reports/final_report/leverage_sensitivity/figures/baseline_advanced_net_equity_by_leverage_5bps.png)
+
+![Final equity per leverage](reports/final_report/leverage_sensitivity/figures/final_equity_per_leverage_bar_5bps.png)
 
 ### Signal Layer Check
 

@@ -4,7 +4,7 @@
 
 This project builds an hourly crypto PCA residual statistical arbitrage research pipeline. The converged mainline compares ordinary PCA residuals against a residual-comovement-penalized advanced PCA model under the same audited backtest engine.
 
-Main converged 5bps result: ordinary PCA equal-weight net equity `1.4295`, max drawdown `-1.1939`, Sharpe-like `0.7970`; advanced PCA + optimizer net equity `4.7158`, max drawdown `-0.6293`, Sharpe-like `2.9666`.
+Main converged 5bps result at `gross_cap = 1.5`: ordinary PCA equal-weight net equity `0.8628`, max drawdown `-0.7209`, Sharpe-like `0.8008`; advanced PCA + optimizer net equity `2.8168`, max drawdown `-0.3775`, Sharpe-like `2.9122`.
 
 ## 2. Data and No-Lookahead Universe
 
@@ -19,6 +19,25 @@ Final PCA setting is W360 / PC3. PC1 behaves like a broad crypto market factor. 
 ![PC loadings](figures/pca/pc_loading_bar_charts_selected_dates.png)
 
 ![Eigenportfolio returns](figures/pca/eigenportfolio_cumulative_returns.png)
+
+## 3.1 Residual Cleanliness Diagnostics
+
+Advanced PCA is evaluated by the residual space it leaves behind. The retained diagnostic uses rolling W360 residual return matrices and compares ordinary PCA against advanced PCA on average absolute residual pairwise correlation and residual PC1 EVR.
+
+| metric | ordinary_mean | advanced_mean | reduction_pct |
+|:--|--:|--:|--:|
+| avg_abs_pairwise_residual_corr | 0.0762 | 0.0734 | 3.7% |
+| residual_pc1_evr_corr | 0.0923 | 0.0865 | 6.4% |
+
+The result supports the intended mechanism: advanced PCA does not need to radically change factor EVR to help the strategy. Its role is to leave a cleaner residual space for OU-style mean-reversion trading.
+
+![Residual cleanliness](residual_cleanliness/figures/residual_cleanliness_bar.png)
+
+Detailed outputs:
+
+- `reports/final_report/residual_cleanliness/residual_cleanliness_summary.csv`
+- `reports/final_report/residual_cleanliness/residual_cleanliness_timeseries.csv`
+- `reports/final_report/residual_cleanliness/residual_cleanliness_improvement_table.md`
 
 ## 4. OU Residual Modeling
 
@@ -54,7 +73,9 @@ The portfolio opens sleeves that match long and short notional at entry. Dollar 
 
 The retained optimizer diagnostic minimizes distance to equal-weight sizing plus a soft z-PC1 exposure penalty:
 
-`minimize distance_to_equal_weight + lambda_portfolio_zbeta * z_PC1_exposure^2`
+```text
+min_w ||w - w_equal||_2^2 + lambda_portfolio_zbeta * z_beta_exposure(w)^2
+```
 
 Hard constraints enforce equal long and short notional at sleeve entry, nonnegative long/short notionals, concentration cap, and gross-cap capacity. The z-PC1 term is a soft penalty, not a hard equality constraint. Hard PC1 neutrality was often infeasible; soft penalty preserves sleeve coverage while reducing relative beta mismatch.
 
@@ -106,16 +127,39 @@ Detailed mechanism report: `bad_trade_mechanism_report.md`.
 
 The converged mainline uses the audited dynamic eligible universe. For timestamp `t`, PCA uses only `[t-360h, t-1h]`; tickers with missing values in that window are excluded and receive no s-score for that timestamp. The final filter set is intentionally simple: finite price/return/s-score and `0 < half_life <= 90h`. OU estimation itself only admits valid `0 < b < 1` fits. There is no sigma percentile or R2 entry filter.
 
-Advanced PCA fixes `lambda_pca_comovement = 0.5`; ordinary PCA uses equal-weight dollar-neutral sleeves, and advanced PCA uses portfolio soft beta penalty `lambda_portfolio_zbeta = 3.0`. Positions are force-closed when the ticker leaves the no-lookahead universe.
+Advanced PCA fixes `lambda_pca_comovement = 0.5`; ordinary PCA uses equal-weight dollar-neutral sleeves, and advanced PCA uses portfolio soft beta penalty `lambda_portfolio_zbeta = 3.0`. The displayed mainline uses `gross_cap = 1.5` as a moderately aggressive research setting. Positions are force-closed when the ticker leaves the no-lookahead universe.
 
-| method              |   portfolio_lambda |   fee_bps |   final_net_equity |   max_drawdown_net |   sharpe_like_net |   avg_active_gross_exposure |   universe_lost_exits |
-|:--------------------|-------------------:|----------:|-------------------:|-------------------:|------------------:|----------------------------:|----------------------:|
-| ordinary            |             0.0000 |         5 |             1.4295 |            -1.1939 |            0.7970 |                      2.2858 |                   648 |
-| advanced_lambda_0p5 |             3.0000 |         5 |             4.7158 |            -0.6293 |            2.9666 |                      2.2201 |                   431 |
+The advanced PCA improvement is interpreted through residual cleanliness rather than additional signal filtering: the same OU and half-life rules are used, while the residual-comovement penalty reduces residual pairwise correlation and residual PC1 EVR before portfolio construction.
+
+| method              |   portfolio_lambda |   gross_cap |   fee_bps |   final_net_equity |   max_drawdown_net |   sharpe_like_net |   avg_active_gross_exposure |   universe_lost_exits |
+|:--------------------|-------------------:|------------:|----------:|-------------------:|-------------------:|------------------:|----------------------------:|----------------------:|
+| ordinary            |             0.0000 |      1.5000 |         5 |             0.8628 |            -0.7209 |            0.8008 |                      1.3716 |                   648 |
+| advanced_lambda_0p5 |             3.0000 |      1.5000 |         5 |             2.8168 |            -0.3775 |            2.9122 |                      1.3328 |                   430 |
 
 ![Converged mainline equity](converged_mainline/figures/converged_mainline_net_equity_5bps.png)
 
 Detailed converged report: `converged_mainline/converged_mainline_report.md`.
+
+## 11.1 Leverage Sensitivity
+
+The previous 2.5x gross cap is high for a displayed research strategy. The retained mainline is therefore shown at `gross_cap = 1.5`, while a separate leverage diagnostic reruns the same signals and final engine at `1.0x`, `1.5x`, `2.0x`, and `2.5x`.
+
+| model | gross_cap | final_net_equity | final_net_equity_per_gross_cap | max_drawdown_net | max_drawdown_per_gross_cap |
+|:--|--:|--:|--:|--:|--:|
+| Ordinary PCA equal-weight | 1.0 | 0.5752 | 0.5752 | -0.4806 | -0.4806 |
+| Ordinary PCA equal-weight | 1.5 | 0.8628 | 0.5752 | -0.7209 | -0.4806 |
+| Ordinary PCA equal-weight | 2.0 | 1.1504 | 0.5752 | -0.9611 | -0.4806 |
+| Ordinary PCA equal-weight | 2.5 | 1.4295 | 0.5718 | -1.1939 | -0.4775 |
+| Advanced PCA + optimizer | 1.0 | 1.8779 | 1.8779 | -0.2517 | -0.2517 |
+| Advanced PCA + optimizer | 1.5 | 2.8168 | 1.8779 | -0.3775 | -0.2517 |
+| Advanced PCA + optimizer | 2.0 | 3.7558 | 1.8779 | -0.5033 | -0.2517 |
+| Advanced PCA + optimizer | 2.5 | 4.7158 | 1.8863 | -0.6293 | -0.2517 |
+
+Final equity divided by gross cap is stable across the tested range, which suggests the strategy behavior is not primarily a fragile high-leverage artifact.
+
+![Leverage sensitivity](leverage_sensitivity/figures/baseline_advanced_net_equity_by_leverage_5bps.png)
+
+![Final equity per leverage](leverage_sensitivity/figures/final_equity_per_leverage_bar_5bps.png)
 
 ## 12. Attribution
 
@@ -155,7 +199,7 @@ The largest drawdown is mostly short-side driven. Future work can consider short
 - Hourly data cannot verify intrabar fills.
 - No true bid-ask spread, slippage, or market impact is modeled.
 - Short borrow, funding, and availability are not modeled.
-- `gross_cap=2.5` is moderate leverage.
+- `gross_cap=1.5` is still a leveraged research setting, though less aggressive than the earlier 2.5x display.
 - The strategy still needs out-of-sample / walk-forward validation.
 
 ## 14. Future Work

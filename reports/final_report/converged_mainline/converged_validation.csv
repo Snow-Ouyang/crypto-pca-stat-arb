@@ -1,0 +1,9 @@
+check,method,fee_bps,error,pass_flag
+final_equity_reconciliation,ordinary,0.0,-5.10702591327572e-15,True
+final_equity_reconciliation,ordinary,5.0,-5.440092820663267e-15,True
+final_equity_reconciliation,ordinary,10.0,-6.106226635438361e-15,True
+short_sign_validation,ordinary,,0.0,True
+final_equity_reconciliation,advanced_lambda_0p5,0.0,-2.6645352591003757e-15,True
+final_equity_reconciliation,advanced_lambda_0p5,5.0,-3.1086244689504383e-15,True
+final_equity_reconciliation,advanced_lambda_0p5,10.0,-2.6645352591003757e-15,True
+short_sign_validation,advanced_lambda_0p5,,0.0,True

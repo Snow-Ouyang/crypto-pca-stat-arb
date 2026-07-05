@@ -29,7 +29,7 @@ FROZEN_ORDINARY_SIGNAL = PROJECT_ROOT / "data" / "processed" / "final_pipeline" 
 
 PCA_LAMBDA_ADVANCED = 0.5
 PORTFOLIO_LAMBDA = {"ordinary": 0.0, "advanced_lambda_0p5": 3.0}
-GROSS_CAP = 2.5
+GROSS_CAP = 1.5
 FEE_BPS_LIST = [0, 5, 10]
 SHORT_ENTRY = 1.0
 SHORT_EXIT = 0.25
@@ -524,6 +524,8 @@ def write_report(summary_df: pd.DataFrame, validation_df: pd.DataFrame, compare_
         "Filters are simplified to finite price/return/s-score and `0 < half_life <= 90h`. No sigma percentile or R2 filter is applied. OU estimation itself only returns valid mean-reverting `0 < b < 1` fits.",
         "",
         "Existing positions are force-closed when the ticker leaves the raw no-lookahead universe. Ordinary PCA baseline uses equal-weight dollar-neutral sleeves with no soft-beta optimization; advanced PCA uses the soft beta optimizer.",
+        "",
+        f"The displayed mainline uses `gross_cap = {GROSS_CAP:g}`.",
         "",
         "## Performance",
         summary_df.to_markdown(index=False, floatfmt=".6f"),
