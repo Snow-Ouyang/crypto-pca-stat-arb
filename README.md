@@ -22,6 +22,17 @@ Ordinary PCA focuses on explained variance. Advanced PCA adds a residual-comovem
 
 Ordinary PCA selects factors by maximizing explained variance, but statistical arbitrage cares about the quality of the remaining residuals. This project introduces an advanced PCA variant that penalizes residual comovement, targeting residuals with lower pairwise correlation and lower residual PC1 explained variance.
 
+The advanced PCA objective searches for three orthonormal factors inside the ordinary PCA candidate subspace:
+
+```text
+min_Q reconstruction_loss(Y, Q)
+    + lambda_pca_comovement * residual_PC1_EVR_corr(Y - Y Q Q')
+
+subject to Q'Q = I
+```
+
+where `Y` is the rolling W360 standardized return matrix, `Q` is the selected PC1-PC3 factor basis, and `residual_PC1_EVR_corr` is the first explained-variance ratio of the residual correlation matrix.
+
 The goal is not only to explain the crypto return cross-section, but to construct residuals that are cleaner for OU-style mean-reversion trading. Compared with ordinary PCA, the advanced PCA reduces average absolute residual pairwise correlation by `3.7%` and residual PC1 EVR by `6.4%` in the retained W360 diagnostic.
 
 The exact residual-cleanliness diagnostics are reported under `reports/final_report/residual_cleanliness/`.
@@ -32,9 +43,13 @@ The portfolio optimizer starts from an equal-weight dollar-neutral sleeve as a r
 
 ```text
 min_w ||w - w_equal||_2^2 + lambda_portfolio_zbeta * z_beta_exposure(w)^2
+
+subject to sum(w_long) = sum(w_short)
+           sum(|w|) <= gross_cap capacity
+           w_long >= 0, w_short >= 0
 ```
 
-The equal-weight prior keeps sizing stable, while the soft penalty avoids the infeasibility and overconstraint risk of a hard factor-neutral rule. Long and short notional remain dollar-neutral at sleeve entry; the optimizer mainly improves factor exposure balance when signal breadth allows it.
+The equal-weight prior keeps sizing stable, while the soft penalty avoids the infeasibility and overconstraint risk of a hard factor-neutral rule. Long and short notional remain dollar-neutral at sleeve entry; the optimizer mainly improves factor exposure balance when signal breadth allows it. The displayed mainline uses `lambda_portfolio_zbeta = 3.0` and `gross_cap = 1.5`.
 
 ## Converged Mainline
 
